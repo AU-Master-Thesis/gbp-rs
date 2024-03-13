@@ -257,14 +257,8 @@ impl RobotBundle {
             );
 
             let factor_node_index = factorgraph.add_factor(dynamic_factor);
-            let _ = factorgraph.add_edge(
-                VariableIndex(variable_node_indices[i]),
-                FactorIndex(factor_node_index),
-            );
-            let _ = factorgraph.add_edge(
-                VariableIndex(variable_node_indices[i + 1]),
-                FactorIndex(factor_node_index),
-            );
+            let _ = factorgraph.add_edge(variable_node_indices[i], factor_node_index);
+            let _ = factorgraph.add_edge(variable_node_indices[i + 1], factor_node_index);
         }
 
         // Create Obstacle factors for all variables excluding start, excluding horizon
@@ -280,10 +274,7 @@ impl RobotBundle {
             );
 
             let factor_node_index = factorgraph.add_factor(obstacle_factor);
-            let _ = factorgraph.add_edge(
-                VariableIndex(variable_node_indices[i]),
-                FactorIndex(factor_node_index),
-            );
+            let _ = factorgraph.add_edge(variable_node_indices[i], factor_node_index);
         }
 
         // std::process::exit(0);
@@ -446,11 +437,13 @@ fn create_interrobot_factors_system(
                     safety_radius as Float,
                     connection,
                 );
+                // TODO: add an external variable to the factorgraph
+                // TODO: add an external factor to the factorgraph connecting to
                 let factor_index = factorgraph.add_factor(interrobot_factor);
                 let variable_index = factorgraph
                     .nth_variable_index(i)
                     .expect("there should be an i'th variable");
-                factorgraph.add_edge(VariableIndex(variable_index), FactorIndex(factor_index));
+                factorgraph.add_edge(variable_index, factor_index);
             }
 
             robotstate
@@ -516,54 +509,6 @@ fn iterate_gbp_external_system(mut query: Query<(Entity, &mut FactorGraph), With
     }
 }
 
-// pub fn iterate_gbp_internal_system(
-//     mut query: Query<(Entity, &mut FactorGraph), With<RobotState>>,
-//     config: Res<Config>,
-// ) {
-//     for (robot_id, mut factorgraph) in query.iter_mut() {
-//         factorgraph.variable_iteration(robot_id, MessagePassingMode::Internal);
-//     }
-//
-//     for (robot_id, mut factorgraph) in query.iter_mut() {
-//         factorgraph.factor_iteration(robot_id, MessagePassingMode::Internal);
-//     }
-//
-//     // query
-//     //     .par_iter_mut()
-//     //     .for_each(|(robot_id, mut factorgraph)| {
-//     //         factorgraph.variable_iteration(robot_id, MessagePassingMode::Internal);
-//     //     });
-//     // query
-//     //     .par_iter_mut()
-//     //     .for_each(|(robot_id, mut factorgraph)| {
-//     //         factorgraph.factor_iteration(robot_id, MessagePassingMode::Internal);
-//     //     });
-// }
-
-// iterate_gbp_impl!(iterate_gbp_internal_system, MessagePassingMode::Internal);
-// iterate_gbp_impl!(iterate_gbp_external_system, MessagePassingMode::External);
-
-// fn iterate_gbp_system(
-//     mut query: Query<(Entity, &mut FactorGraph), With<RobotState>>,
-//     config: Res<Config>,
-// ) {
-
-//     query.par_iter_mut().for_each(|(robot_id, mut factorgraph)| {
-//         factorgraph.factor_iteration(robot_id, MessagePassingMode::Internal);
-//     });
-//     query.par_iter_mut().for_each(|(robot_id, mut factorgraph)| {
-//         factorgraph.variable_iteration(robot_id, MessagePassingMode::Internal);
-//     });
-//     // for (robot_id, mut factorgraph) in query.par_iter_mut() {
-//     //     factorgraph.factor_iteration(robot_id, MessagePassingMode::Internal);
-//     // }
-//     // for (robot_id, mut factorgraph) in query.iter_mut() {
-//     //     factorgraph.variable_iteration(robot_id, MessagePassingMode::Internal);
-//     // }
-// }
-
-// fn iterate_gbp(query: Query<&mut FactorGraph>, config: Res<Config>) {}
-
 /// Called `Robot::updateHorizon` in **gbpplanner**
 fn update_prior_of_horizon_state_system(
     mut query: Query<(Entity, &mut FactorGraph, &mut Waypoints), With<RobotState>>,
@@ -594,8 +539,8 @@ fn update_prior_of_horizon_state_system(
             // dbg!(&current_waypoint);
             // dbg!(&mean_of_horizon_variable);
             let estimated_position = mean_of_horizon_variable.slice(s![..2]); // the mean is a 4x1 vector with [x, y, x', y']
-            dbg!(&estimated_position);
-            dbg!(&current_waypoint);
+                                                                              // dbg!(&estimated_position);
+                                                                              // dbg!(&current_waypoint);
             let horizon2goal_dir = current_waypoint - estimated_position;
             let horizon2goal_dist = horizon2goal_dir.euclidean_norm();
 

@@ -9,7 +9,7 @@ use std::{
     ops::{AddAssign, Sub},
 };
 
-use super::{factorgraph::Inbox, message::Message, robot::RobotId};
+use super::{factorgraph::VariableIndex, message::Message, robot::RobotId};
 
 // TODO: make generic over f32 | f64
 // TODO: hide the state parameter from the public API, by having the `Factor` struct expose similar methods that dispatch to the `FactorState` struct.
@@ -620,6 +620,8 @@ impl FactorState {
     }
 }
 
+pub type Inbox = HashMap<VariableIndex, Message>;
+
 #[derive(Debug, Clone)]
 pub struct Factor {
     /// Unique identifier that associates the variable with a factorgraph/robot.
@@ -733,12 +735,12 @@ impl Factor {
     }
 
     #[inline(always)]
-    pub fn send_message(&mut self, from: NodeIndex, message: Message) {
+    pub fn send_message(&mut self, from: VariableIndex, message: Message) {
         let _ = self.inbox.insert(from, message);
     }
 
     #[inline(always)]
-    pub fn read_message_from(&mut self, from: NodeIndex) -> Option<&Message> {
+    pub fn read_message_from(&mut self, from: VariableIndex) -> Option<&Message> {
         self.inbox.get(&from)
     }
 

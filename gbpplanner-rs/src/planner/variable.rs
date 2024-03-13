@@ -3,19 +3,18 @@ use std::collections::HashMap;
 use crate::utils::Indent;
 use crate::utils::PrettyPrint;
 
-use super::factorgraph::Inbox;
-use super::factorgraph::NodeIndex;
-use super::message::Eta;
-use super::message::Lam;
-use super::message::Message;
-use super::message::Mu;
-use gbp_linalg::pretty_print_matrix;
-use gbp_linalg::Matrix;
-use gbp_linalg::{Float, Vector};
+use super::factorgraph::FactorMessages;
+use super::{
+    factorgraph::{FactorIndex, NodeIndex, VariableIndex},
+    message::{Eta, Lam, Message, Mu},
+};
+use gbp_linalg::{pretty_print_matrix, Float, Matrix, Vector};
 // use gbp_multivariate_normal::dummy_normal::DummyNormal;
 use gbp_multivariate_normal::MultivariateNormal;
 use ndarray_inverse::Inverse;
 use tap::Tap;
+
+pub type Inbox = HashMap<FactorIndex, Message>;
 
 /// A variable in the factor graph.
 #[derive(Debug, Clone)]
@@ -110,12 +109,12 @@ impl Variable {
     //     }
     // }
 
-    pub fn send_message(&mut self, from: NodeIndex, message: Message) {
+    pub fn send_message(&mut self, from: FactorIndex, message: Message) {
         let _ = self.inbox.insert(from, message);
     }
 
     // TODO: why never used?
-    pub fn read_message_from(&mut self, from: NodeIndex) -> Option<&Message> {
+    pub fn read_message_from(&mut self, from: FactorIndex) -> Option<&Message> {
         self.inbox.get(&from)
     }
 
@@ -126,8 +125,9 @@ impl Variable {
     pub fn change_prior(
         &mut self,
         mean: &Vector<Float>,
-        indices_of_adjacent_factors: Vec<NodeIndex>,
-    ) -> HashMap<NodeIndex, Message> {
+        indices_of_adjacent_factors: Vec<FactorIndex>,
+        // ) -> HashMap<NodeIndex, Message> {
+    ) -> FactorMessages {
         self.eta_prior = self.lam_prior.dot(mean);
         self.mu = mean.clone();
 
@@ -165,7 +165,7 @@ impl Variable {
     // /***********************************************************************************************************/
     /// Variable Belief Update step (Step 1 in the GBP algorithm)
     /// called `Variable::update_belief` in **gbpplanner**
-    pub fn update_belief_and_create_responses(&mut self) -> HashMap<NodeIndex, Message> {
+    pub fn update_belief_and_create_responses(&mut self) -> FactorMessages {
         // Collect messages from all other factors, begin by "collecting message from pose factor prior"
         self.eta = self.eta_prior.clone();
         self.lam = self.lam_prior.clone();
