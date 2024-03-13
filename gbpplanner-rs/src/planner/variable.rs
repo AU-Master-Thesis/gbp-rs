@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::utils::Indent;
 use crate::utils::PrettyPrint;
 
+use super::factorgraph::FactorGraphNode;
 use super::factorgraph::FactorMessages;
 use super::{
     factorgraph::{FactorIndex, NodeIndex, VariableIndex},

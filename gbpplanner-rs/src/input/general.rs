@@ -177,6 +177,7 @@ fn export_factorgraphs_as_graphviz(
                         connection.id_of_robot_connected_with,
                         connection
                             .index_of_connected_variable_in_other_robots_factorgraph
+                            .0
                             .index(),
                     ),
                 )),

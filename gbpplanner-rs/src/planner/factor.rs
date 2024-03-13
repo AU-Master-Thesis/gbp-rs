@@ -9,7 +9,11 @@ use std::{
     ops::{AddAssign, Sub},
 };
 
-use super::{factorgraph::VariableIndex, message::Message, robot::RobotId};
+use super::{
+    factorgraph::{FactorGraphNode, VariableIndex},
+    message::Message,
+    robot::RobotId,
+};
 
 // TODO: make generic over f32 | f64
 // TODO: hide the state parameter from the public API, by having the `Factor` struct expose similar methods that dispatch to the `FactorState` struct.
@@ -76,7 +80,7 @@ trait Model {
 #[derive(Debug, Clone, Copy)]
 pub struct InterRobotConnection {
     pub id_of_robot_connected_with: RobotId,
-    pub index_of_connected_variable_in_other_robots_factorgraph: NodeIndex,
+    pub index_of_connected_variable_in_other_robots_factorgraph: VariableIndex,
 }
 
 /// Interrobot factor: for avoidance of other robots
@@ -620,7 +624,7 @@ impl FactorState {
     }
 }
 
-pub type Inbox = HashMap<VariableIndex, Message>;
+type Inbox = HashMap<VariableIndex, Message>;
 
 #[derive(Debug, Clone)]
 pub struct Factor {

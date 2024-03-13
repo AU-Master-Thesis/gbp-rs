@@ -4,7 +4,10 @@ use crate::config::Config;
 use crate::utils::get_variable_timesteps;
 
 use super::factor::{Factor, InterRobotConnection};
-use super::factorgraph::{FactorGraph, FactorIndex, MessagePassingMode, VariableIndex};
+use super::factorgraph::{
+    ExternalVariable, ExternalVariableIndex, FactorGraph, FactorIndex, MessagePassingMode,
+    VariableIndex,
+};
 // use super::multivariate_normal::MultivariateNormal;
 use super::variable::Variable;
 use super::NodeIndex;
@@ -400,7 +403,7 @@ fn create_interrobot_factors_system(
 
     let number_of_variables = variable_timesteps.timesteps.len();
 
-    let variable_indices_of_each_factorgraph: HashMap<RobotId, Vec<NodeIndex>> = query
+    let variable_indices_of_each_factorgraph: HashMap<RobotId, Vec<VariableIndex>> = query
         .iter()
         .map(|(robot_id, factorgraph, _)| {
             let variable_indices = factorgraph
@@ -409,6 +412,8 @@ fn create_interrobot_factors_system(
             (robot_id, variable_indices)
         })
         .collect();
+
+    // let initial_messages_from_external_variables: HashMap<RobotId, HashMap<VariableIndex, Message>> =
 
     for (robot_id, mut factorgraph, mut robotstate) in query.iter_mut() {
         for other_robot_id in new_connections_to_establish
@@ -444,6 +449,16 @@ fn create_interrobot_factors_system(
                     .nth_variable_index(i)
                     .expect("there should be an i'th variable");
                 factorgraph.add_edge(variable_index, factor_index);
+                let external_variable_index =
+                    factorgraph.add_external_variable(ExternalVariable::new(
+                        *other_robot_id,
+                        ExternalVariableIndex::new(other_variable_indices[i - 1]),
+                    ));
+                factorgraph.add_edge_to_external_variable(external_variable_index, factor_index);
+                info!(
+                    "robot {:?} created interrobot factor to robot {:?}",
+                    robot_id, other_robot_id
+                );
             }
 
             robotstate
@@ -556,24 +571,20 @@ fn update_prior_of_horizon_state_system(
             (index, new_mean, horizon2goal_dist)
         };
 
-        println!(
-            "index = {:?}, horizon2goal_dist = {:?}",
-            index, horizon2goal_dist
-        );
+        // println!(
+        //     "index = {:?}, horizon2goal_dist = {:?}",
+        //     index, horizon2goal_dist
+        // );
 
         // TODO: cache the mean ...
         // horizon_variable.belief.mean()
 
-        // TODO: create a separate method on Variable so we do not have to abuse the interface, and call it with a empty
-
         factorgraph.change_prior_of_variable(index, new_mean);
-        // vector, and get an empty HashMap as a return value.
-        // let _ = horizon_variable.change_prior(new_mean, vec![]);
 
-        println!(
-            "horizon2goal_dist = {:?}, config.robot.radius = {:?}",
-            horizon2goal_dist, config.robot.radius
-        );
+        // println!(
+        //     "horizon2goal_dist = {:?}, config.robot.radius = {:?}",
+        //     horizon2goal_dist, config.robot.radius
+        // );
         // NOTE: this is weird, we think
         let horizon_has_reached_waypoint = horizon2goal_dist < config.robot.radius as Float;
         if horizon_has_reached_waypoint && !waypoints.0.is_empty() {
