@@ -32,7 +32,7 @@ pub mod graphviz {
             self.kind.shape()
         }
 
-        pub fn width(&self) -> &'static str {
+        pub fn width(&self) -> f64 {
             self.kind.width()
         }
     }
@@ -40,12 +40,6 @@ pub mod graphviz {
     pub enum NodeKind {
         Variable { x: f32, y: f32 },
         InterRobotFactor(InterRobotConnection),
-        // InterRobotFactor {
-        //     /// The id of the robot the interrobot factor is connected to
-        //     other_robot_id: RobotId,
-        //     /// The index of the variable in the other robots factorgraph, that the interrobot factor is connected with
-        //     variable_index_in_other_robot: usize,
-        // },
         DynamicFactor,
         ObstacleFactor,
         PoseFactor,
@@ -69,11 +63,10 @@ pub mod graphviz {
             }
         }
 
-        // TODO: return a float
-        pub fn width(&self) -> &'static str {
+        pub fn width(&self) -> f64 {
             match self {
-                Self::Variable { .. } => "0.8",
-                _ => "0.2",
+                Self::Variable { .. } => 0.8,
+                _ => 0.2,
             }
         }
     }
@@ -84,8 +77,22 @@ pub mod graphviz {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ExternalFactor {
+    factorgraph_id: RobotId,
+    factor_index: NodeIndex,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExternalVariable {
+    factorgraph_id: RobotId,
+    variable_index: NodeIndex,
+}
+
 // TODO: implement for each and use
 pub trait FactorGraphNode {
+    // type Index;
+
     fn messages_received(&self) -> usize;
     fn messages_sent(&self) -> usize;
 
@@ -110,6 +117,8 @@ pub enum Node {
     Factor(Factor),
     // TODO: wrap in Box<>
     Variable(Variable),
+    ExternalFactor(ExternalFactor),
+    ExternalVariable(ExternalVariable),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -125,19 +134,6 @@ pub enum EdgeConnection {
 // }
 
 impl Node {
-    // pub fn set_node_index(&mut self, index: NodeIndex) {
-    //     match self {
-    //         Self::Factor(factor) => factor.set_node_index(index),
-    //         Self::Variable(variable) => variable.set_node_index(index),
-    //     }
-    // }
-    // pub fn get_node_index(&mut self) -> NodeIndex {
-    //     match self {
-    //         Self::Factor(factor) => factor.get_node_index(),
-    //         Self::Variable(variable) => variable.get_node_index(),
-    //     }
-    // }
-
     /// Returns `true` if the node is [`Factor`].
     ///
     /// [`Factor`]: Node::Factor
@@ -189,6 +185,46 @@ impl Node {
             None
         }
     }
+
+    pub fn as_external_factor(&self) -> Option<&ExternalFactor> {
+        if let Self::ExternalFactor(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    /// Returns `true` if the node is [`ExternalFactor`].
+    ///
+    /// [`ExternalFactor`]: Node::ExternalFactor
+    #[must_use]
+    pub fn is_external_factor(&self) -> bool {
+        matches!(self, Self::ExternalFactor(..))
+    }
+
+    /// Returns `true` if the node is [`ExternalVariable`].
+    ///
+    /// [`ExternalVariable`]: Node::ExternalVariable
+    #[must_use]
+    pub fn is_external_variable(&self) -> bool {
+        matches!(self, Self::ExternalVariable(..))
+    }
+
+    pub fn as_external_variable(&self) -> Option<&ExternalVariable> {
+        if let Self::ExternalVariable(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    ///
+    pub fn is_external(&self) -> bool {
+        match self {
+            Self::ExternalVariable(_) | Self::ExternalFactor(_) => true,
+            _ => false,
+        }
+    }
 }
 
 /// The type used to represent indices into the nodes of the factorgraph.
@@ -197,8 +233,12 @@ impl Node {
 /// index type across modules, as the various node index types `petgraph`
 /// are not interchangeable.
 pub type NodeIndex = petgraph::graph::NodeIndex;
-pub type VariableIndex = NodeIndex;
-pub type FactorIndex = NodeIndex;
+pub struct VariableIndex(pub NodeIndex);
+// pub type VariableIndex = NodeIndex;
+pub struct FactorIndex(pub NodeIndex);
+pub struct ExternalFactorIndex(pub NodeIndex);
+pub struct ExternalVariableIndex(pub NodeIndex);
+// pub type FactorIndex = NodeIndex;
 /// The type used to represent indices into the nodes of the factorgraph.
 pub type EdgeIndex = petgraph::graph::EdgeIndex;
 /// A factorgraph is an undirected graph
@@ -213,6 +253,8 @@ pub type Graph = petgraph::graph::Graph<Node, (), Undirected, u32>;
 pub struct NodeCount {
     pub factors: usize,
     pub variables: usize,
+    pub external_factors: usize,
+    pub external_variables: usize,
 }
 
 /// A factor graph is a bipartite graph consisting of two types of nodes: factors and variables.
@@ -230,6 +272,8 @@ pub struct FactorGraph {
     /// is consistent at all time.
     variable_indices: Vec<NodeIndex>,
     factor_indices: Vec<NodeIndex>,
+    external_factor_indices: Vec<NodeIndex>,
+    external_variable_indices: Vec<NodeIndex>,
 }
 
 pub struct Factors<'a> {
@@ -280,6 +324,55 @@ impl<'a> Iterator for Variables<'a> {
     }
 }
 
+pub struct ExternalFactors<'a> {
+    graph: &'a Graph,
+    factor_indices: std::slice::Iter<'a, NodeIndex>,
+}
+
+impl<'a> ExternalFactors<'a> {
+    pub fn new(graph: &'a Graph, factor_indices: &'a [NodeIndex]) -> Self {
+        Self {
+            graph,
+            factor_indices: factor_indices.iter(),
+        }
+    }
+}
+
+impl<'a> Iterator for ExternalFactors<'a> {
+    type Item = (NodeIndex, &'a ExternalFactor);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let &index = self.factor_indices.next()?;
+        let node = &self.graph[index];
+        node.as_external_factor().map(|factor| (index, factor))
+    }
+}
+
+pub struct ExternalVariables<'a> {
+    graph: &'a Graph,
+    variable_indices: std::slice::Iter<'a, NodeIndex>,
+}
+
+impl<'a> ExternalVariables<'a> {
+    pub fn new(graph: &'a Graph, variable_indices: &'a [NodeIndex]) -> Self {
+        Self {
+            graph,
+            variable_indices: variable_indices.iter(),
+        }
+    }
+}
+
+impl<'a> Iterator for ExternalVariables<'a> {
+    type Item = (NodeIndex, &'a ExternalVariable);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let &index = self.variable_indices.next()?;
+        let node = &self.graph[index];
+        node.as_external_variable()
+            .map(|variable| (index, variable))
+    }
+}
+
 impl FactorGraph {
     /// Construct a new empty factorgraph
     pub fn new() -> Self {
@@ -291,6 +384,8 @@ impl FactorGraph {
             // },
             variable_indices: Vec::new(),
             factor_indices: Vec::new(),
+            external_variable_indices: Vec::new(),
+            external_factor_indices: Vec::new(),
         }
     }
 
@@ -322,6 +417,20 @@ impl FactorGraph {
         node_index
     }
 
+    pub fn add_external_factor(&mut self, external_factor: ExternalFactor) -> NodeIndex {
+        let node_index = self.graph.add_node(Node::ExternalFactor(external_factor));
+        self.external_factor_indices.push(node_index);
+        node_index
+    }
+
+    pub fn add_external_variable(&mut self, external_variable: ExternalVariable) -> NodeIndex {
+        let node_index = self
+            .graph
+            .add_node(Node::ExternalVariable(external_variable));
+        self.external_variable_indices.push(node_index);
+        node_index
+    }
+
     /// Add an edge between nodes `a` and `b` in the factorgraph.
     ///
     /// **invariants**:
@@ -334,13 +443,13 @@ impl FactorGraph {
         let dofs = 4;
 
         let message_to_factor = {
-            let Some(variable) = self.graph[variable_index].as_variable_mut() else {
+            let Some(variable) = self.graph[variable_index.0].as_variable_mut() else {
                 panic!(
-                    "the variable index either does not exist or does not point to a variable node"
+                    "the variable index either does not exist or does not point to a Node::Variable node"
                 );
             };
             // TODO: explain why we send an empty message
-            variable.send_message(factor_index, Message::empty(dofs));
+            variable.send_message(factor_index.0, Message::empty(dofs));
 
             Message::new(
                 Eta(variable.eta.clone()),
@@ -351,21 +460,27 @@ impl FactorGraph {
 
         // dbg!(&message_to_factor);
 
-        match self.graph[factor_index] {
-            Node::Factor(ref mut factor) => factor.send_message(variable_index, message_to_factor),
-            Node::Variable(_) => {
-                panic!("the factor index either does not exist or does not point to a factor node")
+        match self.graph[factor_index.0] {
+            Node::Factor(ref mut factor) => {
+                factor.send_message(variable_index.0, message_to_factor)
             }
+            _ => {
+                panic!("the factor index either does not exist or does not point to a factor node")
+            } // Node::Variable(_) => {
+              //     panic!("the factor index either does not exist or does not point to a factor node")
+              // }
         }
 
-        self.graph.add_edge(variable_index, factor_index, ())
+        self.graph.add_edge(variable_index.0, factor_index.0, ())
     }
 
     /// Number of nodes in the factorgraph
+    /// Excludes external factors and variables
     ///
     /// **Computes in O(1) time**
     pub fn len(&self) -> usize {
-        self.graph.node_count()
+        // self.graph.node_count()
+        self.variable_indices.len() + self.factor_indices.len()
     }
 
     /// Return an ordered interval of variables indices.
@@ -390,8 +505,6 @@ impl FactorGraph {
         }
     }
 
-    // pub fn factors(&self) -> impl Iterator<Item = Node> {}
-
     /// A count over the number of variables and factors in the factorgraph
     ///
     /// **Computes in O(1) time**
@@ -399,6 +512,8 @@ impl FactorGraph {
         NodeCount {
             factors: self.factor_indices.len(),
             variables: self.variable_indices.len(),
+            external_factors: self.external_factor_indices.len(),
+            external_variables: self.external_variable_indices.len(),
         }
     }
 
@@ -447,29 +562,33 @@ impl FactorGraph {
         let nodes = self
             .graph
             .node_indices()
-            .map(|node_index| {
+            .filter_map(|node_index| {
                 let node = &self.graph[node_index];
-                graphviz::Node {
-                    index: node_index.index(),
-                    kind: match node {
-                        Node::Factor(factor) => match factor.kind {
-                            FactorKind::Dynamic(_) => graphviz::NodeKind::DynamicFactor,
-                            FactorKind::Obstacle(_) => graphviz::NodeKind::ObstacleFactor,
-                            FactorKind::Pose(_) => graphviz::NodeKind::PoseFactor,
-                            FactorKind::InterRobot(inner) => {
-                                graphviz::NodeKind::InterRobotFactor(inner.connection.clone())
-                            }
-                        },
-                        Node::Variable(variable) => {
-                            // let mean = variable.belief.mean();
-                            let mean = &variable.mu;
-                            graphviz::NodeKind::Variable {
-                                x: mean[0] as f32,
-                                y: mean[1] as f32,
-                            }
+                let kind = match node {
+                    Node::Factor(factor) => Some(match factor.kind {
+                        FactorKind::Dynamic(_) => graphviz::NodeKind::DynamicFactor,
+                        FactorKind::Obstacle(_) => graphviz::NodeKind::ObstacleFactor,
+                        FactorKind::Pose(_) => graphviz::NodeKind::PoseFactor,
+                        FactorKind::InterRobot(inner) => {
+                            graphviz::NodeKind::InterRobotFactor(inner.connection.clone())
                         }
-                    },
-                }
+                    }),
+                    Node::Variable(variable) => {
+                        // let mean = variable.belief.mean();
+                        let mean = &variable.mu;
+                        Some(graphviz::NodeKind::Variable {
+                            x: mean[0] as f32,
+                            y: mean[1] as f32,
+                        })
+                    }
+                    Node::ExternalFactor(_) => None,
+                    Node::ExternalVariable(_) => None,
+                };
+
+                kind.map(|kind| graphviz::Node {
+                    index: node_index.index(),
+                    kind,
+                })
             })
             .collect::<Vec<_>>();
 

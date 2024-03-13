@@ -4,7 +4,7 @@ use crate::config::Config;
 use crate::utils::get_variable_timesteps;
 
 use super::factor::{Factor, InterRobotConnection};
-use super::factorgraph::{FactorGraph, MessagePassingMode};
+use super::factorgraph::{FactorGraph, FactorIndex, MessagePassingMode, VariableIndex};
 // use super::multivariate_normal::MultivariateNormal;
 use super::variable::Variable;
 use super::NodeIndex;
@@ -257,8 +257,14 @@ impl RobotBundle {
             );
 
             let factor_node_index = factorgraph.add_factor(dynamic_factor);
-            let _ = factorgraph.add_edge(variable_node_indices[i], factor_node_index);
-            let _ = factorgraph.add_edge(variable_node_indices[i + 1], factor_node_index);
+            let _ = factorgraph.add_edge(
+                VariableIndex(variable_node_indices[i]),
+                FactorIndex(factor_node_index),
+            );
+            let _ = factorgraph.add_edge(
+                VariableIndex(variable_node_indices[i + 1]),
+                FactorIndex(factor_node_index),
+            );
         }
 
         // Create Obstacle factors for all variables excluding start, excluding horizon
@@ -274,7 +280,10 @@ impl RobotBundle {
             );
 
             let factor_node_index = factorgraph.add_factor(obstacle_factor);
-            let _ = factorgraph.add_edge(variable_node_indices[i], factor_node_index);
+            let _ = factorgraph.add_edge(
+                VariableIndex(variable_node_indices[i]),
+                FactorIndex(factor_node_index),
+            );
         }
 
         // std::process::exit(0);
@@ -441,7 +450,7 @@ fn create_interrobot_factors_system(
                 let variable_index = factorgraph
                     .nth_variable_index(i)
                     .expect("there should be an i'th variable");
-                factorgraph.add_edge(variable_index, factor_index);
+                factorgraph.add_edge(VariableIndex(variable_index), FactorIndex(factor_index));
             }
 
             robotstate
